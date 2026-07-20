@@ -1,0 +1,31 @@
+pkgname=mistercast
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Low-latency Wayland desktop streaming to Groovy_MiSTer"
+arch=('x86_64')
+url="https://github.com/iequalshane/MiSTerCast"
+license=('custom:private-use')
+depends=('qt6-base' 'pipewire' 'lz4' 'xdg-desktop-portal')
+optdepends=(
+    'wireplumber: PipeWire session manager'
+    'xdg-desktop-portal-kde: KDE ScreenCast portal backend'
+)
+makedepends=('cmake' 'ninja' 'pkgconf')
+
+build() {
+    cmake \
+        -S "$startdir/.." \
+        -B "$srcdir/build" \
+        -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr
+    cmake --build "$srcdir/build"
+}
+
+check() {
+    ctest --test-dir "$srcdir/build" --output-on-failure
+}
+
+package() {
+    DESTDIR="$pkgdir" cmake --install "$srcdir/build"
+}

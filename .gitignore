@@ -1,0 +1,7 @@
+/build/
+/build-*/
+/packaging/pkg/
+/packaging/src/
+/packaging/*.pkg.tar.*
+*.webm
+*.mkv

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=MiSTerCast
+Comment=Low-latency desktop streaming to Groovy_MiSTer
+Exec=mistercast
+Icon=mistercast
+Terminal=false
+Categories=AudioVideo;
