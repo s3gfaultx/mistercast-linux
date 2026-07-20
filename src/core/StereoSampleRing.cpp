@@ -2,6 +2,13 @@
 
 namespace mistercast {
 
+void StereoSampleRing::observeDeliveryQuantum(std::size_t sampleCount)
+{
+    std::lock_guard lock(mutex_);
+    maximumWriteSamples_ = std::max(
+        maximumWriteSamples_, std::min(sampleCount - sampleCount % 2, samples_.size()));
+}
+
 void AdaptiveJitterReserve::reset()
 {
     frames_ = kInitialFrames;
@@ -35,7 +42,8 @@ std::size_t StereoSampleRing::read(
 {
     std::lock_guard lock(mutex_);
     const std::size_t writableSamples = destination.size() - destination.size() % 2;
-    const std::size_t targetMaximum = writableSamples + reserveFrames * 2;
+    const std::size_t targetMaximum =
+        reserveFrames * 2 + writableSamples + maximumWriteSamples_;
 
     if (available_ > targetMaximum) {
         std::size_t discard = available_ - targetMaximum;
@@ -80,6 +88,7 @@ void StereoSampleRing::clear()
         available_ = 0;
         staleSamplesDiscarded_ = 0;
         overflowSamples_ = 0;
+        maximumWriteSamples_ = 0;
     }
 
     samplesAvailable_.notify_all();

@@ -44,6 +44,8 @@ public:
         sampleCount -= sampleCount % 2;
         {
             std::lock_guard lock(mutex_);
+            maximumWriteSamples_ = std::max(
+                maximumWriteSamples_, std::min(sampleCount, samples_.size()));
             for (std::size_t i = 0; i < sampleCount; ++i) {
                 if (available_ == samples_.size()) {
                     readPosition_ = (readPosition_ + 1) % samples_.size();
@@ -58,6 +60,7 @@ public:
         samplesAvailable_.notify_all();
     }
 
+    void observeDeliveryQuantum(std::size_t sampleCount);
     void write(std::span<const std::int16_t> samples);
     std::size_t read(std::span<std::int16_t> destination, std::size_t reserveFrames);
     bool waitForSamples(
@@ -74,6 +77,7 @@ private:
     std::size_t available_{};
     std::uint64_t staleSamplesDiscarded_{};
     std::uint64_t overflowSamples_{};
+    std::size_t maximumWriteSamples_{};
     mutable std::mutex mutex_;
     std::condition_variable_any samplesAvailable_;
 };

@@ -43,6 +43,7 @@ private slots:
     void interlacedFrameSequence();
     void mailboxNonblockingReuse();
     void stereoRingReserveAndAlignment();
+    void stereoRingPreservesProducerQuantum();
     void adaptiveAudioReserveRespondsToUnderflow();
     void stereoRingOverflow();
     void stereoRingWaitsForProducer();
@@ -472,15 +473,38 @@ void CoreTest::stereoRingReserveAndAlignment()
     for (std::size_t i = 0; i < input.size(); ++i) {
         input[i] = static_cast<std::int16_t>(i);
     }
-    ring.write(input);
+    for (std::size_t offset = 0; offset < input.size(); offset += 4) {
+        ring.write(std::span(input).subspan(offset, 4));
+    }
 
     std::array<std::int16_t, 5> output{};
     QCOMPARE(ring.read(output, 2), std::size_t{4});
-    QCOMPARE(output[0], std::int16_t{12});
-    QCOMPARE(output[3], std::int16_t{15});
+    QCOMPARE(output[0], std::int16_t{8});
+    QCOMPARE(output[3], std::int16_t{11});
     const auto diagnostics = ring.diagnostics();
-    QCOMPARE(diagnostics.staleSamplesDiscarded, std::uint64_t{12});
-    QCOMPARE(diagnostics.bufferedSamples, std::size_t{4});
+    QCOMPARE(diagnostics.staleSamplesDiscarded, std::uint64_t{8});
+    QCOMPARE(diagnostics.bufferedSamples, std::size_t{8});
+}
+
+void CoreTest::stereoRingPreservesProducerQuantum()
+{
+    StereoSampleRing ring;
+    std::array<std::int16_t, 16> input{};
+    for (std::size_t i = 0; i < input.size(); ++i) {
+        input[i] = static_cast<std::int16_t>(i);
+    }
+    ring.observeDeliveryQuantum(input.size());
+    for (std::size_t offset = 0; offset < input.size(); offset += 4) {
+        ring.write(std::span(input).subspan(offset, 4));
+    }
+
+    std::array<std::int16_t, 4> output{};
+    QCOMPARE(ring.read(output, 2), output.size());
+    QCOMPARE(output[0], std::int16_t{0});
+    QCOMPARE(output[3], std::int16_t{3});
+    const auto diagnostics = ring.diagnostics();
+    QCOMPARE(diagnostics.staleSamplesDiscarded, std::uint64_t{0});
+    QCOMPARE(diagnostics.bufferedSamples, std::size_t{12});
 }
 
 void CoreTest::stereoRingOverflow()

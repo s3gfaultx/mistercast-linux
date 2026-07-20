@@ -218,14 +218,19 @@ void PipeWireAudioCapture::onProcess(void* data)
 void PipeWireAudioCapture::processAudio()
 {
     constexpr std::size_t kMaximumBuffersPerCallback = 32;
-    for (std::size_t bufferIndex = 0;
-         bufferIndex < kMaximumBuffersPerCallback;
-         ++bufferIndex) {
+    std::array<pw_buffer*, kMaximumBuffersPerCallback> buffers{};
+    std::array<std::size_t, kMaximumBuffersPerCallback> sampleCounts{};
+    std::size_t bufferCount = 0;
+    std::size_t deliverySamples = 0;
+
+    for (; bufferCount < kMaximumBuffersPerCallback; ++bufferCount) {
         pw_buffer* buffer = pw_stream_dequeue_buffer(stream_);
 
         if (buffer == nullptr) {
-            return;
+            break;
         }
+
+        buffers[bufferCount] = buffer;
 
         const spa_buffer* spaBuffer = buffer->buffer;
 
@@ -234,12 +239,27 @@ void PipeWireAudioCapture::processAudio()
             (spaBuffer->datas[0].chunk->flags & SPA_CHUNK_FLAG_CORRUPTED) == 0) {
 
             const auto& data = spaBuffer->datas[0];
+            const std::size_t validBytes = std::min<std::size_t>(
+                data.chunk->size, data.maxsize);
+            auto& sampleCount = sampleCounts[bufferCount];
+            sampleCount = validBytes / sizeof(std::int16_t);
+            sampleCount -= sampleCount % 2;
+            deliverySamples += sampleCount;
+        }
+    }
+
+    sampleRing_.observeDeliveryQuantum(deliverySamples);
+
+    for (std::size_t bufferIndex = 0; bufferIndex < bufferCount; ++bufferIndex) {
+        pw_buffer* buffer = buffers[bufferIndex];
+        const spa_buffer* spaBuffer = buffer->buffer;
+        const auto sampleCount = sampleCounts[bufferIndex];
+
+        if (sampleCount != 0) {
+
+            const auto& data = spaBuffer->datas[0];
             const std::size_t offset = data.chunk->offset % data.maxsize;
             const auto* bytes = static_cast<const std::uint8_t*>(data.data);
-            const std::size_t validBytes = std::min<std::size_t>(data.chunk->size, data.maxsize);
-
-            auto sampleCount = validBytes / sizeof(std::int16_t);
-            sampleCount -= sampleCount % 2;
 
             const bool empty = (data.chunk->flags & SPA_CHUNK_FLAG_EMPTY) != 0;
 
