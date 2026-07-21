@@ -39,6 +39,7 @@ private slots:
     void bundledModelinesLoad();
     void protocolCodecGoldens();
     void streamTimingPolicyGoldens();
+    void pacingReleaseOffsetSchedule();
     void adaptiveDeliveryMarginRecoversOnPressure();
     void interlacedFrameSequence();
     void mailboxNonblockingReuse();
@@ -331,6 +332,34 @@ void CoreTest::streamTimingPolicyGoldens()
     QCOMPARE(
         calculatePacingLineCorrection(progressive, clamped),
         std::int64_t{65});
+}
+
+void CoreTest::pacingReleaseOffsetSchedule()
+{
+    // No bytes released yet -> no wait.
+    QCOMPARE(pacingReleaseOffset(0), std::chrono::nanoseconds::zero());
+
+    // Exact rate arithmetic: bytes * 8 / bitsPerSecond, in nanoseconds.
+    QCOMPARE(
+        pacingReleaseOffset(1'000'000, 1'000'000'000),
+        std::chrono::nanoseconds(8'000'000));
+    QCOMPARE(
+        pacingReleaseOffset(49'216, 950'000'000),
+        std::chrono::nanoseconds(49'216ULL * 8 * 1'000'000'000 / 950'000'000));
+
+    // Monotonic non-decreasing as more bytes are released.
+    auto previous = pacingReleaseOffset(0);
+    for (std::uint64_t bytes = 1'538; bytes <= 640'000; bytes += 1'538) {
+        const auto current = pacingReleaseOffset(bytes);
+        QVERIFY(current >= previous);
+        previous = current;
+    }
+
+    // A ~470 KB field paces well under a PAL field period (~20 ms).
+    QVERIFY(pacingReleaseOffset(470'000) < std::chrono::milliseconds(6));
+
+    // Degenerate rate is treated as "no pacing" rather than dividing by zero.
+    QCOMPARE(pacingReleaseOffset(1'000'000, 0), std::chrono::nanoseconds::zero());
 }
 
 void CoreTest::adaptiveDeliveryMarginRecoversOnPressure()

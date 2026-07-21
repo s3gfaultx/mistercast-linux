@@ -14,6 +14,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
+#include <ctime>
 #include <fcntl.h>
 #include <netdb.h>
 #include <poll.h>
@@ -418,20 +419,51 @@ bool GroovyMister::sendPayload(
         messages_[i].msg_hdr.msg_iovlen = 1;
     }
 
-    const auto deadline = std::chrono::steady_clock::now() +
+    // Pace large (video) payloads so the burst does not exceed the MiSTer's
+    // 1 Gb link. A faster source NIC would otherwise overrun an intermediate
+    // switch's egress buffer and silently drop the tail of a field. Small
+    // payloads (audio, tiny frames) are sent in one shot.
+    const bool paced = packetCount > kPacingBurstPackets;
+    const std::uint64_t bytesPerPacket = kMtuPayload + kPacingPacketWireOverhead;
+    const auto pacingStart = std::chrono::steady_clock::now();
+    const auto pacedDuration = paced
+        ? pacingReleaseOffset(
+              static_cast<std::uint64_t>(packetCount) * bytesPerPacket)
+        : std::chrono::nanoseconds::zero();
+
+    const auto deadline = pacingStart + pacedDuration +
         std::max(std::chrono::duration_cast<std::chrono::nanoseconds>(
                      std::chrono::milliseconds(5)),
                  frameDuration_ / 2);
-    
+
                  std::size_t sent = 0;
 
     while (sent < packetCount) {
+        unsigned int batch = static_cast<unsigned int>(packetCount - sent);
+
+        if (paced) {
+            const auto target = pacingStart + pacingReleaseOffset(
+                static_cast<std::uint64_t>(sent) * bytesPerPacket);
+            if (std::chrono::steady_clock::now() < target) {
+                const auto targetNs =
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        target.time_since_epoch()).count();
+                timespec wakeUp{};
+                wakeUp.tv_sec = static_cast<std::time_t>(targetNs / 1'000'000'000);
+                wakeUp.tv_nsec = static_cast<long>(targetNs % 1'000'000'000);
+                clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &wakeUp, nullptr);
+            }
+
+            batch = std::min<unsigned int>(
+                batch, static_cast<unsigned int>(kPacingBurstPackets));
+        }
+
         const int result = sendmmsg(
             socket_,
             messages_.data() + sent,
-            static_cast<unsigned int>(packetCount - sent),
+            batch,
             MSG_DONTWAIT);
-        
+
         if (result > 0) {
             sent += static_cast<std::size_t>(result);
             continue;
