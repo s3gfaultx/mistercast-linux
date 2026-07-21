@@ -97,4 +97,16 @@ std::int64_t calculatePacingLineCorrection(
         static_cast<std::int64_t>(mode.vTotal / 4));
 }
 
+std::chrono::nanoseconds pacingReleaseOffset(
+    std::uint64_t wireBytesReleased,
+    std::uint64_t bitsPerSecond)
+{
+    if (bitsPerSecond == 0) {
+        return std::chrono::nanoseconds::zero();
+    }
+
+    return std::chrono::nanoseconds(static_cast<std::int64_t>(
+        wireBytesReleased * 8 * 1'000'000'000 / bitsPerSecond));
+}
+
 } // namespace mistercast
