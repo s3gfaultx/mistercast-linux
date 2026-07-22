@@ -1,8 +1,8 @@
-# MiSTerCast
+# MiSTerCast Linux
 
 Low-latency Wayland desktop and PipeWire audio streaming to the Groovy_MiSTer core.
 
-The GUI supports selectable NTSC and PAL CRT modelines from 256x240p through 720x576i. The project is currently intended for private/local use because the source MiSTerCast repository does not include a redistribution license.
+The GUI supports selectable NTSC and PAL CRT modelines from 256x240p through 720x576i.
 
 ## Build
 
